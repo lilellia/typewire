@@ -1,7 +1,7 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Optional, Literal, Union
 
 import pytest
 
@@ -111,6 +111,14 @@ def test_literal_failed_cast_for_wrong_type() -> None:
         as_type("80", Literal[80, 443])
 
 
+def test_literal_mixed_types() -> None:
+    target = Literal[1, 2] | Literal["3", "4"]
+    with pytest.raises(ValueError, match="Value '1' does not match any type in"):
+        as_type("1", target)
+
+    assert as_type("3", target) == "3"
+
+
 @pytest.mark.parametrize(
     "value,to,expected",
     [
@@ -121,6 +129,10 @@ def test_literal_failed_cast_for_wrong_type() -> None:
 )
 def test_simple_containers(value: Any, to: Any, expected: Any) -> None:
     assert as_type(value, to) == expected
+
+
+def test_empty_container() -> None:
+    assert as_type([], list[int]) == []
 
 
 def test_mapping() -> None:
@@ -146,6 +158,12 @@ def test_fixed_tuples() -> None:
     assert as_type(["1", "hi", "1.2"], target) == (1, "hi", 1.2)
 
 
+def complicated_fixed_tuples() -> None:
+    target = tuple[list[int], dict[str, bool], Literal["force"]]
+    data = (("1", "2"), {"is_active": "yes"}, "force")
+    assert as_type(data, target, semantic_bool = True) == ([1, 2], dict(is_active=True), "force")
+
+
 def test_fixed_tuple_failed_cast() -> None:
     target = tuple[int, str, float]
     with pytest.raises(ValueError):
@@ -157,6 +175,11 @@ def test_variadic_tuple() -> None:
     assert as_type(["1", "2", "3"], target) == (1, 2, 3)
 
 
+def test_variadic_tuple_with_union() -> None:
+    target = tuple[int | Path, ...]
+    assert as_type(["10", "/tmp", "20"], target) == (10, Path("/tmp"), 20)
+
+
 def test_annotated() -> None:
     target = Annotated[int, "some metadata"]
     assert as_type("10", target) == 10
@@ -165,6 +188,12 @@ def test_annotated() -> None:
 def test_deep_nested_annotated() -> None:
     target = Annotated[Annotated[Annotated[int, "metadata 3"], "metadata 2"], "metadata 1"]
     assert as_type("10", target) == 10
+
+
+def test_complicated_annotated() -> None:
+    target = Annotated[Optional[Union[int | float]], "some metadata"]
+    assert as_type("1.5", target) == 1.5
+    assert as_type(None, target) is None
 
 
 def test_deep_nested() -> None:
