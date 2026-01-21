@@ -156,6 +156,11 @@ def as_type(value: Any, to: TypeHint, *, transparent_int: bool = False, semantic
 
         return real_type(vals)
 
+    # handle NewType
+    # note that T = NewType("T", S) means that T.__supertype__ will be S, and we will just cast to S
+    if hasattr(to, "__supertype__"):
+        return as_type(value, to.__supertype__, transparent_int=transparent_int, semantic_bool=semantic_bool)
+
     # handle possible semantic conversions
     if to is int and transparent_int:
         with suppress(ValueError, TypeError):

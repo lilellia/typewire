@@ -64,7 +64,7 @@ Note that `is_iterable` specifically excludes `str` and `bytes`: `is_iterable(st
 The signature is
 
 ```py
-def as_type(value: Any, to: TypeHint, *, transparent_int: bool = False, semantic_bool: False = False) -> Any:
+def as_type(value: Any, to: TypeHint, *, transparent_int: bool = False, semantic_bool: bool = False) -> Any:
   ...
 ```
 
@@ -108,9 +108,20 @@ None
 >>> as_type([1.2, -3, 449], tuple[str, ...])
 ('1.2', '-3', '449')
 
+# even if it's just a blank generic continer: it'll act like T[Any]
+>>> as_type(["a", 3.2, None, [1, "a"]], tuple)
+('a', 3.2, None, [1, 'a'])
+
 # typing.Annotated, treating it as the bare type
 >>> as_type("3", Annotated[int, "some metadata"])
 3
+
+# a typing.NewType, treating it as the supertype
+>>> UserId = NewType("UserId", int)
+>>> as_type("3", UserId)
+3
+>>> type(as_type("3", UserId))  # unfortunately, the UserId type doesn't exist at runtime
+<class 'int'>
 
 # an abstract collections.abc.Iterable/Mapping, cast as concrete list/dict
 >>> as_type([1.2, -3, 449], Iterable[str])
@@ -131,7 +142,7 @@ On a failure, `ValueError` is raised.
 This flag (default = False) allows for a nonstrict cast to `int`.
 
 ```py
->>> int("3.2", int)
+>>> int("3.2")
 ValueError # invalid literal for int() with base 10: '3.2'
 
 >>> as_type("3.2", int)

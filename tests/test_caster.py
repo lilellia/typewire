@@ -1,7 +1,7 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Optional, Literal, Union
+from typing import Annotated, Any, Literal, NewType, Optional, Union
 
 import pytest
 
@@ -47,6 +47,16 @@ def test_transparent_int_true() -> None:
 )
 def test_transparent_int_true_noninteger(value: str, expected: int) -> None:
     assert as_type(value, int, transparent_int=True) == expected
+
+
+def test_transparent_int_in_optional() -> None:
+    x = as_type("1.0", Optional[int], transparent_int=True)
+    assert isinstance(x, int)
+
+
+def test_transparent_int_in_container() -> None:
+    (x,) = as_type(["1.0"], list[int], transparent_int=True)
+    assert isinstance(x, int)
 
 
 def test_semantic_bool_false() -> None:
@@ -161,7 +171,7 @@ def test_fixed_tuples() -> None:
 def complicated_fixed_tuples() -> None:
     target = tuple[list[int], dict[str, bool], Literal["force"]]
     data = (("1", "2"), {"is_active": "yes"}, "force")
-    assert as_type(data, target, semantic_bool = True) == ([1, 2], dict(is_active=True), "force")
+    assert as_type(data, target, semantic_bool=True) == ([1, 2], dict(is_active=True), "force")
 
 
 def test_fixed_tuple_failed_cast() -> None:
@@ -223,6 +233,14 @@ def test_custom_class() -> None:
     assert as_type("abc", X) == X("abc")
 
 
+def test_custom_class_in_container() -> None:
+    @dataclass
+    class X:
+        value: str
+
+    assert as_type(["abc", "def"], list[X]) == [X("abc"), X("def")]
+
+
 def test_iterable_excludes_strings() -> None:
     assert as_type("abc", Iterable[str]) == "abc"
 
@@ -233,3 +251,22 @@ def test_abstract_mapping() -> None:
 
 def test_abstract_sequence() -> None:
     assert as_type(["3", "7"], Iterable[int]) == [3, 7]
+
+
+def test_nested_any() -> None:
+    assert as_type(["1", 2, None], list[Any]) == ["1", 2, None]
+
+
+def test_new_type() -> None:
+    UserID = NewType("UserID", int)
+    assert as_type("1", UserID) == UserID(1)
+
+
+def test_union_with_literal() -> None:
+    target = Literal["auto", "manual"] | int
+    assert as_type("auto", target) == "auto"
+    assert as_type(17, target) == 17
+
+
+def test_with_bare_generic_container() -> None:
+    assert as_type(["1", 2, 3.0], tuple) == ("1", 2, 3.0)
