@@ -92,6 +92,7 @@ def test_union_failed_cast() -> None:
     "value,optional,expected",
     [
         ("abc", str | None, "abc"),
+        (None, str | None, None),
         (None, int | None, None),
     ],
 )

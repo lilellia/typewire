@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "typewire"
-version = "1.0.0"
+version = "1.0.1"
 description = "A single-file utility to allow better runtime handling of types by providing a predictable way of transforming data into the shape of a given type hint."
 readme = "README.md"
 requires-python = ">=3.10"

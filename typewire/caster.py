@@ -9,7 +9,15 @@ TypeHint: TypeAlias = Any
 
 def is_union(type_hint: TypeHint) -> bool:
     """Determine whether the given type represents a union type."""
-    return type_hint is Union or (hasattr(types, "UnionType") and isinstance(type_hint, types.UnionType))
+    if get_origin(type_hint) is Union:
+        # Union[T1, T2] or Optional[T]
+        return True
+
+    if hasattr(types, "UnionType") and isinstance(type_hint, types.UnionType):
+        # T1 | T2
+        return True
+
+    return type_hint is Union
 
 
 def is_mapping(type_hint: TypeHint) -> bool:
@@ -61,10 +69,11 @@ def as_type(value: Any, to: TypeHint, *, transparent_int: bool = False, semantic
 
     # handle unions
     if is_union(to):
-        for type_hint in get_args(to):
-            if type_hint is type(None) and value is None:
-                return None
+        if value is None and type(None) in args:
+            # if we're allowed to have None in the union, then return that
+            return None
 
+        for type_hint in get_args(to):
             with suppress(ValueError, TypeError):
                 return as_type(value, type_hint, transparent_int=transparent_int, semantic_bool=semantic_bool)
         else:
@@ -79,22 +88,6 @@ def as_type(value: Any, to: TypeHint, *, transparent_int: bool = False, semantic
 
     # If `to` is a plain type (e.g., int), then origin is None. But we want something we can actually call.
     real_type = origin if origin is not None else to
-
-    # handle unions (e.g., int | float | None)
-    if is_union(real_type):
-        for type_hint in args:
-            # if value is None, then we can allow None in the union
-            if type_hint is type(None):
-                if value is None:
-                    return None
-                continue
-
-            # otherwise, try to find the first matching type
-            with suppress(ValueError, TypeError):
-                return as_type(value, type_hint, transparent_int=transparent_int, semantic_bool=semantic_bool)
-        else:
-            # none of the types match
-            raise ValueError(f"Value {value!r} does not match any type in {to}")
 
     # handle mappings
     if is_mapping(real_type):
