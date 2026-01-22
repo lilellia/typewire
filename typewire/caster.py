@@ -1,37 +1,9 @@
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from contextlib import suppress
 import inspect
-import types
-from typing import Annotated, Any, get_args, get_origin, Literal, TypeAlias, TypeVar, Union
+from typing import Annotated, Any, get_args, get_origin, Literal, TypeVar
 
-TypeHint: TypeAlias = Any
-
-
-def is_union(type_hint: TypeHint) -> bool:
-    """Determine whether the given type represents a union type."""
-    if get_origin(type_hint) is Union:
-        # Union[T1, T2] or Optional[T]
-        return True
-
-    if hasattr(types, "UnionType") and isinstance(type_hint, types.UnionType):
-        # T1 | T2
-        return True
-
-    return type_hint is Union
-
-
-def is_mapping(type_hint: TypeHint) -> bool:
-    """Determine whether the given type represents a mapping type."""
-    origin = get_origin(type_hint)
-    real_type = origin if origin is not None else type_hint
-    return isinstance(real_type, type) and issubclass(real_type, Mapping)
-
-
-def is_iterable(type_hint: TypeHint) -> bool:
-    """Determine whether the given type represents an iterable type."""
-    origin = get_origin(type_hint)
-    real_type = origin if origin is not None else type_hint
-    return isinstance(real_type, type) and issubclass(real_type, Iterable) and real_type not in (str, bytes)
+from .identifier import is_iterable, is_mapping, is_union, TypeHint
 
 
 def as_type(value: Any, to: TypeHint, *, transparent_int: bool = False, semantic_bool: bool = False) -> Any:

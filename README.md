@@ -170,3 +170,51 @@ False
 ```
 
 In practice, if `value` is a string and is one of `["false", "no", "0", "off"]` (case-insensitive), then it will be cast as `False` with this flag enabled.
+
+### `unwrap`
+
+`unwrap` recursively removes `Annotated`, `NewType`, and `Union` layers, returning a list of component types. Note that it does *not* unwrap other containers, such as `list`. This is because `unwrap` is working to identify what the type "is", rather to find all of the structural components. From that perspective, `list[T]` is itself a leaf: the type represents a list.
+
+```py
+# bare types are just themselves
+>>> unwrap(int)
+[int]
+
+>>> unwrap(list[int])
+[list[int]]
+
+# note that None is interpreted to NoneType, i.e., type(None)
+>>> unwrap(None)
+[<class 'NoneType'>]
+
+# union types return their components in order
+>>> unwrap(int | str)
+[int, str]
+>>> unwrap(str | int)
+[str, int]
+
+# resulting types are deduplicated
+>>> unwrap(int | str | int)
+[int, str]
+
+# also works with old-style Optional
+>>> unwrap(Optional[int])
+[int, <class 'NoneType'>]
+
+# annotated layer gets removed
+>>> unwrap(Annotated[int, "some metadata"])
+[int]
+
+# NewType gets unwrapped, returning the supertype
+>>> UserId = NewType("UserId", int)
+>>> unwrap(UserId)
+[int]
+
+# unwrap can handle matroyska dolls of nesting
+# resulting order is depth-first
+>>> T1, T2, T3 = TypeVar("T1"), TypeVar("T2"), TypeVar("T3")
+>>> D1 = NewType("D1", T1)
+>>> matroyska_doll = Optional[Annotated[T1 | Annotated[T2 | D1 | None | Annotated[T3 | T1, "level 2"], "level 1"], "level 2"]]
+>>> unwrap(matroyska_doll)
+[T1, T2, <class 'NoneType'>, T3]  # D1 -> T1, so it doesn't appear in the result, nor does the final T1
+```
