@@ -1,20 +1,20 @@
-from typing import Annotated, NewType, Optional, TypeVar, Union
+from typing import Any, Annotated, NewType, Optional, TypeVar, Union
 
 import pytest
 
 from typewire import TypeHint, unwrap
 
+# Throughout, ignore[new-type] avoids mypy complaining that these TypeVars are unbound, but they're unbound by design.
+# `Derived` has ignore[valid-newtype] because otherwise, mypy complains about T1 not being a proper class.
 T1 = TypeVar("T1")
 T2 = TypeVar("T2")
 T3 = TypeVar("T3")
-Derived = NewType("Derived", T1)
+Derived = NewType("Derived", T1)  # type: ignore[valid-newtype, valid-type]
 ConcreteDerived = NewType("ConcreteDerived", list[str | int | dict[float, int]])
 
 
 class UnhashableType:
-    __hash__ = None
-
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         return self is other
 
 
@@ -27,7 +27,7 @@ class UnhashableType:
         (T1, [T1]),
         (list[int], [list[int]]),
         (dict[str, int], [dict[str, int]]),
-        (list[T1 | T2], [list[T1 | T2]]),
+        (list[T1 | T2], [list[T1 | T2]]),  # type: ignore[valid-type]
         (UnhashableType, [UnhashableType]),
     ],
 )

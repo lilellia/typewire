@@ -1,13 +1,13 @@
 from collections.abc import Iterable, Mapping
 import types
-from typing import Annotated, Any, get_args, get_origin, TypeAlias, Union
+from typing import Annotated, Any, cast, get_args, get_origin, TypeAlias, Union
 
 TypeHint: TypeAlias = Any
 
 
 def is_union(type_hint: TypeHint) -> bool:
     """Determine whether the given type represents a union type."""
-    if get_origin(type_hint) is Union:
+    if get_origin(type_hint) is cast(Any, Union):
         # Union[T1, T2] or Optional[T]
         return True
 
@@ -43,7 +43,7 @@ def unwrap(type_hint: TypeHint) -> list[TypeHint]:
         origin = get_origin(t)
         args = get_args(t)
 
-        if origin is Annotated:
+        if origin is cast(Any, Annotated):
             # hint is Annotated[T, metadata]
             return _flatten(args[0])
 
