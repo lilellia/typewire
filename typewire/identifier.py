@@ -18,11 +18,25 @@ def is_union(type_hint: TypeHint) -> bool:
     return type_hint is Union
 
 
+def is_typed_dict(type_hint: TypeHint) -> bool:
+    """Determine whether the given type represents a TypedDict type."""
+    return isinstance(type_hint, type) and hasattr(type_hint, "__annotations__") and hasattr(type_hint, "__total__")
+
+
 def is_mapping(type_hint: TypeHint) -> bool:
     """Determine whether the given type represents a mapping type."""
     origin = get_origin(type_hint)
     real_type = origin if origin is not None else type_hint
-    return isinstance(real_type, type) and issubclass(real_type, Mapping)
+
+    # normal mapping classes
+    if isinstance(real_type, type) and issubclass(real_type, Mapping):
+        return True
+
+    # TypedDict
+    if is_typed_dict(type_hint):
+        return True
+
+    return False
 
 
 def is_iterable(type_hint: TypeHint) -> bool:

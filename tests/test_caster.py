@@ -1,7 +1,14 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, NewType, Optional, Union
+import sys
+from typing import Annotated, Any, Literal, NewType, Optional, TypedDict, Union
+
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, Required
+else:
+    from typing_extensions import NotRequired, Required
+
 
 import pytest
 
@@ -271,3 +278,97 @@ def test_union_with_literal() -> None:
 
 def test_with_bare_generic_container() -> None:
     assert as_type(["1", 2, 3.0], tuple) == ("1", 2, 3.0)
+
+
+def test_cast_to_typed_dict_valid() -> None:
+    class Data(TypedDict):
+        x: int
+        y: list[int]
+
+    value = {"x": "10", "y": ("1", "2", "3")}
+    assert as_type(value, Data) == Data(x=10, y=[1, 2, 3])
+
+
+def test_cast_to_typed_dict_missing_nonrequired_field() -> None:
+    class Data(TypedDict):
+        x: NotRequired[int]
+        y: list[int]
+
+    value = {"y": ("1", "2", "3")}
+    assert as_type(value, Data) == Data(y=[1, 2, 3])
+
+
+def test_cast_to_typed_dict_total_false_missing_everything() -> None:
+    class Data(TypedDict, total=False):
+        x: int
+        y: list[int]
+
+    assert as_type({}, Data) == Data()
+
+
+def test_cast_to_typed_dict_missing_required_field() -> None:
+    class Data(TypedDict):
+        x: int
+        y: list[int]
+
+    value = {"y": ("1", "2", "3")}
+    with pytest.raises(ValueError, match=r"Missing required field\(s\) for Data: 'x'"):
+        as_type(value, Data)
+
+
+def test_cast_to_typed_dict_with_extra_key_open() -> None:
+    class Data(TypedDict):
+        x: int
+        y: list[int]
+
+    value = {"x": "10", "y": ("1", "2", "3"), "z": "4"}
+    expected = Data(x=10, y=[1, 2, 3], z="4")  # type: ignore[typeddict-unknown-key]
+    assert as_type(value, Data, closed_typed_dicts=False) == expected
+
+
+def test_cast_to_typed_dict_with_extra_key_closed() -> None:
+    class Data(TypedDict):
+        x: int
+        y: list[int]
+
+    value = {"x": "10", "y": ("1", "2", "3"), "z": "4"}
+    with pytest.raises(ValueError, match=r"Unexpected field\(s\) for Data: 'z'"):
+        as_type(value, Data, closed_typed_dicts=True)
+
+
+def test_cast_to_typed_dict_with_total_true_but_nonrequired_key_missing() -> None:
+    class Data(TypedDict, total=True):
+        x: NotRequired[int]
+        y: list[int]
+
+    value = {"y": ("1", "2", "3")}
+    assert as_type(value, Data) == Data(y=[1, 2, 3])
+
+
+def test_cast_to_typed_dict_with_total_false_but_required_key_missing() -> None:
+    class Data(TypedDict, total=False):
+        x: Required[int]
+        y: list[int]
+
+    value = {"y": ("1", "2", "3")}
+    with pytest.raises(ValueError, match=r"Missing required field\(s\) for Data: 'x'"):
+        as_type(value, Data)
+
+
+def test_cast_to_nested_typed_dict() -> None:
+    class Data(TypedDict):
+        x: int
+        y: list[int]
+
+    class DataSet(TypedDict):
+        data: list[Data]
+
+    value = {
+        "data": [
+            {"x": "10", "y": ("1", "2", "3")},
+            {"x": "20", "y": ("4", "5", "6")},
+            {"x": "30", "y": ("7", "8", "9")},
+        ]
+    }
+    expected = DataSet(data=[Data(x=10, y=[1, 2, 3]), Data(x=20, y=[4, 5, 6]), Data(x=30, y=[7, 8, 9])])
+    assert as_type(value, DataSet) == expected

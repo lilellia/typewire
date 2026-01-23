@@ -64,7 +64,7 @@ Note that `is_iterable` specifically excludes `str` and `bytes`: `is_iterable(st
 The signature is
 
 ```py
-def as_type(value: Any, to: TypeHint, *, transparent_int: bool = False, semantic_bool: bool = False) -> Any:
+def as_type(value: Any, to: TypeHint, *, transparent_int: bool = False, semantic_bool: bool = False, closed_typed_dicts: bool = False) -> Any:
   ...
 ```
 
@@ -100,6 +100,23 @@ None
 # a mapping type
 >>> as_type({"a": "1", "b": "2.0"}, dict[str, float])
 {'a': 1.0, 'b': 2.0}
+
+# even TypedDict
+>>> class Point(TypedDict):
+...     x: float
+...     y: float
+
+>>> as_type({"x": "1.0", "y": "2.0"}, Point)  # note that TypedDict collapses to regular dict at runtime
+{'x': 1.0, 'y': 2.0}
+
+>>> as_type({"x": "1.0"}, Point)  # note the missing required 'y' field
+ValueError("Missing required field(s) for Point: 'y'")
+
+>>> as_type({"x": "1.0", "y": "2.0", "z": "3.0"}, Point)  # note the extra 'z' field, which is left alone...
+{'x': 1.0, 'y': 2.0, 'z': '3.0'}
+
+>>> as_type({"x": "1.0", "y": "2.0", "z": "3.0"}, Point, closed_typed_dicts=True)  # ...unless you tell typewire that TypedDicts should be closed
+ValueError("Unexpected field(s) for Point: 'z'")
 
 # a container/iterable type
 >>> as_type([1.2, -3, 449], list[str])
@@ -170,6 +187,22 @@ False
 ```
 
 In practice, if `value` is a string and is one of `["false", "no", "0", "off"]` (case-insensitive), then it will be cast as `False` with this flag enabled.
+
+#### `closed_typed_dicts`
+
+When `to` is (or contains) a TypedDict, this determines whether additional keys beyond the TypedDict's schema are allowed. With `closed_typed_dicts=True`, additional keys will raise a `ValueError`. That is,
+
+```py
+>>> class Point(TypedDict):
+...     x: float
+...     y: float
+
+>>> as_type({"x": "1.0", "y": "2.0", "z": "3.0"}, Point, closed_typed_dicts=False)
+{'x': 1.0, 'y': 2.0, 'z': '3.0'}
+
+>>> as_type({"x": "1.0", "y": "2.0", "z": "3.0"}, Point, closed_typed_dicts=True)
+ValueError("Unexpected field(s) for Point: 'z'")
+```
 
 ### `unwrap`
 
