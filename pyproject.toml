@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "typewire"
-version = "1.1.0"
+version = "1.2.0"
 description = "A single-file utility to allow better runtime handling of types by providing a predictable way of transforming data into the shape of a given type hint."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -41,6 +41,7 @@ classifiers = [
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+extend-exclude = ["tests/test_312_type_syntax.py"]  # This file is 3.12+, so Ruff (on Python 3.10) can't analyse it.
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
@@ -55,6 +56,7 @@ order-by-type = false
 [tool.mypy]
 python_version = "3.10"
 strict = true
+exclude = ["tests/test_312_type_syntax.py"]  # This file is 3.12+, so Mypy (on Python 3.10) can't analyse it.
 
 [dependency-groups]
 dev = [

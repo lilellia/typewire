@@ -1,6 +1,6 @@
 # typewire
 
-A single-file utility to allow better runtime handling of types by providing a predictable way of transforming data into the shape of a given type hint.
+A utility to allow better runtime handling of types by providing a predictable way of transforming data into the shape of a given type hint.
 
 ## Why?
 
@@ -45,7 +45,7 @@ $ pip install typewire
 $ uv add typewire
 ```
 
-`typewire` does not have any additional dependencies.
+`typewire` does not have any additional dependencies except for, on Python 3.10 only, `typing_extensions`.
 
 ## Documentation
 
@@ -139,6 +139,18 @@ ValueError("Unexpected field(s) for Point: 'z'")
 3
 >>> type(as_type("3", UserId))  # unfortunately, the UserId type doesn't exist at runtime
 <class 'int'>
+
+# a recursive type
+>>> class Node(TypedDict):
+...     data: int
+...     next: NotRequired[Node]
+
+>>> as_type({"data": "12", "next": {"data": "17"}}, Node)
+{'data': 12, 'next': {'data': 17}}
+
+>>> type Tree = list[int | Tree]
+>>> as_type(["1", ["2", "3"], ["4", ["5"]]], Tree)
+[1, [2, 3], [4, [5]]]
 
 # an abstract collections.abc.Iterable/Mapping, cast as concrete list/dict
 >>> as_type([1.2, -3, 449], Iterable[str])
@@ -251,3 +263,56 @@ ValueError("Unexpected field(s) for Point: 'z'")
 >>> unwrap(matroyska_doll)
 [T1, T2, <class 'NoneType'>, T3]  # D1 -> T1, so it doesn't appear in the result, nor does the final T1
 ```
+
+### `get_typed_dict_key_sets`
+
+A utility function that provides the keys (required and optional) for a TypedDict. Normally, you'd use `t.__required_keys__` and `t.__optional_keys__`, but this doesn't work when the type hints (including `Required[T]` and `NotRequired[T]`) have been coerced to strings via `from __future__ import annotations`. This function will provide them even in that case.
+
+The return type is a NamedTuple with `required` and `optional` attributes, both of which are `frozenset[str]`, in alignment with the usual `__required_keys__` and `__optional_keys__` types:
+
+```py
+>>> from __future__ import annotations
+>>> from typing import TypedDict, NotRequired
+>>> from typewire import get_typed_dict_key_sets
+
+>>> class Point(TypedDict):
+...     x: float
+...     y: float
+...     z: NotRequired[float]
+
+# This contains 'z' even though it's explicitly NotRequired!
+# This is because the hint (due to the `from __future__ import annotations`)
+# is the literal string "NotRequired[float]", which doesn't get parsed.
+>>> Point.__required_keys__
+frozenset({'x', 'y', 'z'})
+
+# And this is empty for the same reason.
+>>> Point.__optional_keys__
+frozenset()
+
+# typewire provides the parsing, though:
+>>> get_typed_dict_key_sets(Point)
+TypedDictKeySets(required=frozenset({'x', 'y'}), optional=frozenset({'z'}))
+
+>>> required, optional = get_typed_dict_key_sets(Point)
+>>> required
+frozenset({'x', 'y'})
+>>> optional
+frozenset({'z'})
+```
+
+### `evaluate_forward_ref`
+
+A utility function that works to evaluate a ForwardRef (or str), coercing it into a usable runtime object.
+
+The signature is `def evaluate_forward_ref(ref: str | ForwardRef, /, *, namespace: dict[str, Any] | None = None) -> Any`. If `namespace` is None, then it pulls the globals and locals from the caller's frame, if available.
+
+```py
+class X:
+    pass
+
+print(evaluate_forward_ref(typing.ForwardRef("X")))  # <class '__main__.X'>
+assert evaluate_forward_ref(typing.ForwardRef("X")) is X
+```
+
+You wouldn't normally create a ForwardRef object manually, but it's automatically generated any time that a type hint refers to something that hasn't been defined yet (either for recursive types or for another type later in the file). As such, this is primarily an internal function, but it's provided for convenience for anyone who might need it.

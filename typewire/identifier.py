@@ -1,6 +1,15 @@
 from collections.abc import Iterable, Mapping
+import sys
 import types
-from typing import Annotated, Any, cast, get_args, get_origin, TypeAlias, Union
+from typing import Annotated, Any, cast, get_args, get_origin, is_typeddict, TypeAlias, Union
+
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, Required
+else:
+    from typing_extensions import NotRequired, Required
+
+if sys.version_info >= (3, 12):
+    from typing import TypeAliasType
 
 TypeHint: TypeAlias = Any
 
@@ -18,11 +27,6 @@ def is_union(type_hint: TypeHint) -> bool:
     return type_hint is Union
 
 
-def is_typed_dict(type_hint: TypeHint) -> bool:
-    """Determine whether the given type represents a TypedDict type."""
-    return isinstance(type_hint, type) and hasattr(type_hint, "__annotations__") and hasattr(type_hint, "__total__")
-
-
 def is_mapping(type_hint: TypeHint) -> bool:
     """Determine whether the given type represents a mapping type."""
     origin = get_origin(type_hint)
@@ -33,7 +37,7 @@ def is_mapping(type_hint: TypeHint) -> bool:
         return True
 
     # TypedDict
-    if is_typed_dict(type_hint):
+    if is_typeddict(type_hint):
         return True
 
     return False
@@ -54,10 +58,14 @@ def unwrap(type_hint: TypeHint) -> list[TypeHint]:
             # hint is a NewType
             return _flatten(t.__supertype__)
 
+        if sys.version_info >= (3, 12) and isinstance(t, TypeAliasType):
+            # hint is `type Alias = ...` (3.12+ syntax)
+            return _flatten(t.__value__)
+
         origin = get_origin(t)
         args = get_args(t)
 
-        if origin is cast(Any, Annotated):
+        if origin in (cast(Any, T) for T in (Annotated, Required, NotRequired)):
             # hint is Annotated[T, metadata]
             return _flatten(args[0])
 

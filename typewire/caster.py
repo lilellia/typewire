@@ -1,9 +1,38 @@
 from collections.abc import Mapping
 from contextlib import suppress
 import inspect
-from typing import Annotated, Any, get_args, get_origin, Literal, TypeVar
+import sys
+from typing import (
+    Annotated,
+    Any,
+    ForwardRef,
+    get_args,
+    get_origin,
+    get_type_hints,
+    is_typeddict,
+    Literal,
+    TypedDict,
+    TypeVar,
+)
 
-from .identifier import is_iterable, is_mapping, is_typed_dict, is_union, TypeHint
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, Required
+else:
+    from typing_extensions import NotRequired, Required
+
+if sys.version_info >= (3, 12):
+    from typing import TypeAliasType
+
+from .forward_refs import evaluate_forward_ref
+from .identifier import is_iterable, is_mapping, is_union, TypeHint
+from .typed_dict import get_typed_dict_key_sets
+
+
+class _AsTypeKwargs(TypedDict):
+    transparent_int: bool
+    semantic_bool: bool
+    closed_typed_dicts: bool
+    _namespace: dict[str, Any] | None
 
 
 def as_type(
@@ -13,6 +42,7 @@ def as_type(
     transparent_int: bool = False,
     semantic_bool: bool = False,
     closed_typed_dicts: bool = False,
+    _namespace: dict[str, Any] | None = None,
 ) -> Any:
     """Cast a value to the given type hint.
 
@@ -44,22 +74,49 @@ def as_type(
 
     :return: The casted value.
     """
-    kwargs = {
-        "transparent_int": transparent_int,
-        "semantic_bool": semantic_bool,
-        "closed_typed_dicts": closed_typed_dicts,
-    }
-
     # We can't cast to Any or an unbound TypeVar, so just return the value as-is
     if to is Any or isinstance(to, TypeVar):
         return value
 
+    if _namespace is None:
+        if (curr_frame := inspect.currentframe()) and (caller_frame := curr_frame.f_back):
+            _namespace = {**caller_frame.f_globals, **caller_frame.f_locals}
+
     origin: Any = get_origin(to)
     args: Any = get_args(to)
 
+    search = [to, *args] if origin else [to]
+    for target in search:
+        target_module = getattr(target, "__module__", None)
+        if target_module and target_module not in ("typing", "builtins", "typing_extensions"):
+            if target_module in sys.modules:
+                # Merge the module dict, but let the captured namespace (from frame) keep priority
+                _namespace = {**sys.modules[target_module].__dict__, **(_namespace or {})}
+                break
+
+    # Resolve situation when `to` is a str or ForwardRef
+    if isinstance(to, (str, ForwardRef)):
+        if _namespace:
+            to = evaluate_forward_ref(to, namespace=_namespace)
+
+    kwargs: _AsTypeKwargs = {
+        "transparent_int": transparent_int,
+        "semantic_bool": semantic_bool,
+        "closed_typed_dicts": closed_typed_dicts,
+        "_namespace": _namespace,
+    }
+
+    origin, args = get_origin(to), get_args(to)
+
     # reach into Annotated
-    if origin is Annotated:
+    if origin in (Annotated, Required, NotRequired):
         to = get_args(to)[0]
+        origin = get_origin(to)
+        args = get_args(to)
+
+    # reach into TypeAliasType (the 3.12 `type` keyword syntax)
+    if sys.version_info >= (3, 12) and type(to) is TypeAliasType:
+        to = to.__value__
         origin = get_origin(to)
         args = get_args(to)
 
@@ -69,11 +126,14 @@ def as_type(
             # if we're allowed to have None in the union, then return that
             return None
 
-        for type_hint in get_args(to):
+        for type_hint in args:
+            if isinstance(type_hint, (str, ForwardRef)):
+                print(f"DEBUG: type_hint: {type_hint!r} is still a ForwardRef")
             with suppress(ValueError, TypeError):
                 return as_type(value, type_hint, **kwargs)
         else:
-            raise ValueError(f"Value {value!r} does not match any type in {to}")
+            reprs = ", ".join(repr(a) for a in args)
+            raise ValueError(f"Value {value!r} does not match any type in {to}. Possible types: {reprs}")
 
     # handle literals
     if origin is Literal:
@@ -86,7 +146,7 @@ def as_type(
     real_type = origin if origin is not None else to
 
     # handle mappings
-    if is_mapping(real_type) and not is_typed_dict(real_type):
+    if is_mapping(real_type) and not is_typeddict(real_type):
         if not isinstance(value, Mapping):
             # input is a list of pairs like [("a", 1), ("b", 2)]
             try:
@@ -106,15 +166,16 @@ def as_type(
         return real_type(dct)
 
     # handle TypedDict
-    if is_typed_dict(real_type):
+    if is_typeddict(real_type):
         if not isinstance(value, Mapping):
             # input is a list of pairs like [("a", 1), ("b", 2)]
             try:
                 value = dict(value)
-            except ValueError:
+            except (ValueError, TypeError):
                 raise ValueError(f"Value {value!r} is not a mapping")
 
-        annot = real_type.__annotations__
+        annot = get_type_hints(real_type, globalns=_namespace, include_extras=True)
+        key_sets = get_typed_dict_key_sets(real_type, _globalns=_namespace)
 
         # perform casting
         dct = {key: as_type(val, annot.get(key, Any), **kwargs) for key, val in value.items()}
@@ -123,12 +184,12 @@ def as_type(
         keys = set(dct.keys())
 
         ## ensure that every required key from the schema is present
-        if missing := real_type.__required_keys__ - keys:
+        if missing := key_sets.required - keys:
             ks = ", ".join(sorted(repr(k) for k in missing))
             raise ValueError(f"Missing required field(s) for {real_type.__name__}: {ks}")
 
         ## ensure that there aren't any superfluous keys
-        if closed_typed_dicts and (unexpected := keys - (real_type.__required_keys__ | real_type.__optional_keys__)):
+        if closed_typed_dicts and (unexpected := keys - key_sets.all()):
             ks = ", ".join(sorted(repr(k) for k in unexpected))
             raise ValueError(f"Unexpected field(s) for {real_type.__name__}: {ks}")
 
