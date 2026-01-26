@@ -264,6 +264,36 @@ ValueError("Unexpected field(s) for Point: 'z'")
 [T1, T2, <class 'NoneType'>, T3]  # D1 -> T1, so it doesn't appear in the result, nor does the final T1
 ```
 
+### `as_string`
+
+A utility function that converts a type hint to a readable string.
+
+```py
+>>> from typewire import as_string
+>>> from typing import Annotated, TypedDict
+
+>>> as_string(int)
+'int'
+
+>>> as_string(list[int])
+'list[int]'
+
+>>> as_string(float | str | None)
+'float | str | None'
+
+# as_string omits metadata for Annotated
+>>> as_string(Annotated[str, "some metadata"])
+'Annotated[str, ...]'
+
+# as_string marks all fields for a TypedDict as Required/NotRequired
+>>> class Data(TypedDict):
+...     x: int
+...     y: NotRequired[float | str]
+...
+>>> as_string(Data)
+'Data[x: Required[int], y: NotRequired[float | String]]'
+```
+
 ### `get_typed_dict_key_sets`
 
 A utility function that provides the keys (required and optional) for a TypedDict. Normally, you'd use `t.__required_keys__` and `t.__optional_keys__`, but this doesn't work when the type hints (including `Required[T]` and `NotRequired[T]`) have been coerced to strings via `from __future__ import annotations`. This function will provide them even in that case.

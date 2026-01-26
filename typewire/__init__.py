@@ -1,6 +1,6 @@
 from .caster import as_type
 from .forward_refs import evaluate_forward_ref
-from .identifier import is_iterable, is_mapping, is_union, TypeHint, unwrap
+from .identifier import as_string, is_iterable, is_mapping, is_union, TypeHint, unwrap
 from .typed_dict import get_typed_dict_key_sets
 
 __all__ = [
@@ -12,4 +12,5 @@ __all__ = [
     "unwrap",
     "get_typed_dict_key_sets",
     "evaluate_forward_ref",
+    "as_string",
 ]

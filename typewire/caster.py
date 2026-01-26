@@ -83,7 +83,7 @@ def as_type(
             _namespace = {**caller_frame.f_globals, **caller_frame.f_locals}
 
     origin: Any = get_origin(to)
-    args: Any = get_args(to)
+    args: tuple[Any, ...] = get_args(to)
 
     search = [to, *args] if origin else [to]
     for target in search:

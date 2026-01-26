@@ -1,5 +1,9 @@
 # changelog
 
+## 1.3.0
+
+- Adds `as_string` utility function for getting a readable string representation of the given type_hint.
+
 ## 1.2.0
 
 - Adds `as_type` support for `TypedDict`, including validation with `total`, `Required`, and `NotRequired`.

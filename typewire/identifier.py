@@ -1,7 +1,7 @@
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 import sys
 import types
-from typing import Annotated, Any, cast, get_args, get_origin, is_typeddict, TypeAlias, Union
+from typing import Annotated, Any, cast, get_args, get_origin, get_type_hints, is_typeddict, ParamSpec, TypeAlias, Union
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -10,6 +10,8 @@ else:
 
 if sys.version_info >= (3, 12):
     from typing import TypeAliasType
+
+from .typed_dict import get_typed_dict_key_sets
 
 TypeHint: TypeAlias = Any
 
@@ -83,3 +85,55 @@ def unwrap(type_hint: TypeHint) -> list[TypeHint]:
             unique.append(t)
 
     return unique
+
+
+def as_string(type_hint: TypeHint) -> str:
+    """Construct a string representation of the given type hint."""
+    origin: Any = get_origin(type_hint)
+    args: tuple[Any, ...] = get_args(type_hint)
+
+    if type_hint is type(None):
+        return "None"
+
+    if type_hint is Ellipsis:
+        return "..."
+
+    if is_union(type_hint):
+        return " | ".join(map(as_string, args))
+
+    if is_typeddict(type_hint):
+        required, optional = get_typed_dict_key_sets(type_hint)
+        annot = get_type_hints(type_hint)
+        kv_strs: list[str] = []
+
+        for req in required:
+            kv_strs.append(f"{req}: Required[{as_string(annot[req])}]")
+
+        for opt in optional:
+            kv_strs.append(f"{opt}: NotRequired[{as_string(annot[opt])}]")
+
+        kv_strs.sort()
+        return f"{type_hint.__name__}[{', '.join(kv_strs)}]"
+
+    if origin is Callable:
+        if not args:
+            return "Callable"
+
+        params, return_type = args
+
+        if params is Ellipsis:
+            return f"Callable[..., {as_string(return_type)}]"
+        elif isinstance(params, ParamSpec):
+            return f"Callable[{as_string(params)}, {as_string(return_type)}]"
+        else:
+            param_str = ", ".join(map(as_string, params))
+            return f"Callable[[{param_str}], {as_string(return_type)}]"
+
+    if origin is Annotated:
+        T = as_string(args[0]) if args else "Any"
+        return f"Annotated[{T}, ...]"
+
+    if origin is not None:
+        return f"{as_string(origin)}[{', '.join(map(as_string, args))}]"
+
+    return getattr(type_hint, "__name__", repr(type_hint))
