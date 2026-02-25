@@ -244,6 +244,11 @@ def as_type(
             # We can't instantiate an abstract class, so just return the value
             return value
 
+        # try to return the value as-is if it already matches the desired type
+        with suppress(TypeError):
+            if isinstance(value, real_type):
+                return value
+
         return real_type(value)
 
     # fallback
